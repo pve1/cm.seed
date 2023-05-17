@@ -1,0 +1,6 @@
+
+* Cm.seed
+
+Provides macros that enable an assignment operator (<-) and a
+return-from operator (^).
+
