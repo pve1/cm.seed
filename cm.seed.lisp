@@ -20,21 +20,25 @@
   (equal (reduce-tokens 2 '(1 2 3) '(a b)) '((a b) 3)))
 
 (defun map-tree-preorder (fn tree)
-  (labels ((walk (tr)
-             (typecase tr
-               (cons (let ((new (funcall fn tr)))
-                       (cons (walk (car new))
-                             (walk (cdr new)))))
-               (atom tr))))
-    (walk tree)))
+  (when tree
+    (labels ((walk (tr)
+               (typecase tr
+                 (cons (let ((new (funcall fn tr)))
+                         (if new
+                             (cons (walk (car new))
+                                   (walk (cdr new)))
+                             '())))
+                 (atom tr))))
+      (walk tree))))
 
 (defun map-tree-postorder (fn tree)
-  (labels ((walk (tr)
-             (typecase tr
-               (cons (funcall fn (cons (walk (car tr))
-                                       (walk (cdr tr)))))
-               (atom tr))))
-    (walk tree)))
+  (when tree
+    (labels ((walk (tr)
+               (typecase tr
+                 (cons (funcall fn (cons (walk (car tr))
+                                         (walk (cdr tr)))))
+                 (atom tr))))
+      (walk tree))))
 
 #+self-test.seed
 (self-test.seed:define-self-test map-tree-postorder
@@ -156,14 +160,15 @@
          (match-binop "<-" '(a <- b))))
 
 (defun walk-tree-conses (fn tree)
-  (labels ((walk (tr)
-             (typecase tr
-               (cons
-                (funcall fn tr)
-                (walk (car tr))
-                (walk (cdr tr)))
-               (atom nil))))
-    (walk tree)))
+  (when tree
+    (labels ((walk (tr)
+               (typecase tr
+                 (cons
+                  (funcall fn tr)
+                  (walk (car tr))
+                  (walk (cdr tr)))
+                 (atom nil))))
+      (walk tree))))
 
 (defun collect-assignment-variables (body)
   (let (variables)
