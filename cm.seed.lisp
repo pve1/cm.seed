@@ -79,7 +79,13 @@
   (equal 2 (with-arrow-assignment
              (let (a b)
                a <- b <- 1
-               (+ a b)))))
+               (+ a b))))
+  (equal 1 (with-arrow-assignment
+             (let (a)
+               (flet (((setf set-a) (new)
+                        (setf a new)))
+                 (set-a) <- 1
+                 a)))))
 
 ;;; Combines with-arrow-assignment and with-caret-return.
 
