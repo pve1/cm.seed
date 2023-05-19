@@ -8,16 +8,18 @@
 
 ;;; Tree walking and manipulation
 
-(defun reduce-tokens (n list new &optional append)
+(defun reduce-elements (n list new &optional append)
+  "Replaces the first N elements in LIST with NEW. If APPEND is
+  non-nil, append NEW to the list, otherwise cons."
   (if append
       (append new (nthcdr n list))
       (cons new (nthcdr n list))))
 
 #+self-test.seed
-(self-test.seed:define-self-test reduce-tokens
-  (equal (reduce-tokens 1 '(1 2 3) '(a b)) '((a b) 2 3))
-  (equal (reduce-tokens 1 '(1 2 3) '(a b) t) '(a b 2 3))
-  (equal (reduce-tokens 2 '(1 2 3) '(a b)) '((a b) 3)))
+(self-test.seed:define-self-test reduce-elements
+  (equal (reduce-elements 1 '(1 2 3) '(a b)) '((a b) 2 3))
+  (equal (reduce-elements 1 '(1 2 3) '(a b) t) '(a b 2 3))
+  (equal (reduce-elements 2 '(1 2 3) '(a b)) '((a b) 3)))
 
 ;;; ^ foo => (return-from done foo)
 
@@ -29,7 +31,7 @@
     (if (and (symbolp return)
              (string= (string return) "^")
              valuep)
-        (reduce-tokens 2 tree `(return-from done ,value))
+        (reduce-elements 2 tree `(return-from done ,value))
         tree)))
 
 #+self-test.seed
@@ -60,7 +62,7 @@
     (if (and (symbolp assignment?)
              (string= (string assignment?) "<-")
              valuep)
-        (reduce-tokens 3 tree `(setf ,place ,value))
+        (reduce-elements 3 tree `(setf ,place ,value))
         tree)))
 
 #+self-test.seed
