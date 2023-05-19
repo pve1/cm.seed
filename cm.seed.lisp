@@ -19,37 +19,6 @@
   (equal (reduce-tokens 1 '(1 2 3) '(a b) t) '(a b 2 3))
   (equal (reduce-tokens 2 '(1 2 3) '(a b)) '((a b) 3)))
 
-(defun map-tree-preorder (fn tree)
-  (when tree
-    (labels ((walk (tr)
-               (typecase tr
-                 (cons (let ((new (funcall fn tr)))
-                         (if new
-                             (cons (walk (car new))
-                                   (walk (cdr new)))
-                             '())))
-                 (atom tr))))
-      (walk tree))))
-
-(defun map-tree-postorder (fn tree)
-  (when tree
-    (labels ((walk (tr)
-               (typecase tr
-                 (cons (funcall fn (cons (walk (car tr))
-                                         (walk (cdr tr)))))
-                 (atom tr))))
-      (walk tree))))
-
-#+self-test.seed
-(self-test.seed:define-self-test map-tree-postorder
-  (equal '(1 (2 3) (a b 4 5 6))
-         (map-tree-postorder
-          (lambda (tree)
-            (if (eql (car tree) 4)
-                (append (list 'a 'b) tree)
-                tree))
-          '(1 (2 3) (4 5 6)))))
-
 ;;; ^ foo => (return-from done foo)
 
 (defun substitute-return (tree)
@@ -70,7 +39,8 @@
 
 (defmacro with-caret-return (&body body)
   `(block done
-     ,@(map-tree-postorder 'substitute-return body)))
+     ,@(tree-walking.seed:map-tree-conses-postorder
+        'substitute-return body)))
 
 #+self-test.seed
 (self-test.seed:define-self-test with-caret-return
@@ -99,7 +69,8 @@
   (equal '((setf a nil) x) (substitute-assignment '(a <- nil x))))
 
 (defmacro with-arrow-assignment (&body body)
-  `(progn ,@(map-tree-postorder 'substitute-assignment body)))
+  `(progn ,@(tree-walking.seed:map-tree-conses-postorder
+             'substitute-assignment body)))
 
 #+self-test.seed
 (self-test.seed:define-self-test with-arrow-assignment
@@ -159,23 +130,14 @@
   (equal (list :left 'a :right 'b)
          (match-binop "<-" '(a <- b))))
 
-(defun walk-tree-conses (fn tree)
-  (when tree
-    (labels ((walk (tr)
-               (typecase tr
-                 (cons
-                  (funcall fn tr)
-                  (walk (car tr))
-                  (walk (cdr tr)))
-                 (atom nil))))
-      (walk tree))))
-
 (defun collect-assignment-variables (body)
   (let (variables)
-    (walk-tree-conses
+    (tree-walking.seed:walk-tree-conses-preorder
      (lambda (tree)
        (alexandria:when-let ((match (match-binop "<-" tree)))
-         (pushnew (getf match :left) variables)))
+         (let ((left (getf match :left)))
+           (when (symbolp left)
+             (pushnew left variables)))))
      body)
     (nreverse variables)))
 
@@ -183,6 +145,7 @@
 (self-test.seed:define-self-test collect-assignment-variables
   (equal '(a b c)
          (collect-assignment-variables '(a <- b <- 1
+                                         (foo a) <- 1
                                          (when foo
                                            c <- 3)))))
 

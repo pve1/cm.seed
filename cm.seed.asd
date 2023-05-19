@@ -6,4 +6,5 @@
   :serial t
   :components ((:file "cm.seed"))
   :depends-on (#:package.seed
+               #:tree-walking.seed
                #:alexandria))
