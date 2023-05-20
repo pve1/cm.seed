@@ -10,7 +10,8 @@
 
 (defun reduce-elements (n list new &optional append)
   "Replaces the first N elements in LIST with NEW. If APPEND is
-  non-nil, append NEW to the list, otherwise cons."
+  non-nil, append NEW to the list, otherwise cons. Does not check the
+  length of LIST."
   (if append
       (append new (nthcdr n list))
       (cons new (nthcdr n list))))
