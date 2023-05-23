@@ -3,7 +3,7 @@
 (in-package :cm.seed)
 
 (export '(cm
-          cm*
+          cm+
           cmlet))
 
 ;;; Tree walking and manipulation
@@ -122,7 +122,7 @@
            b <- 2
            (list a b c))))
 
-;;; Cm*
+;;; Cm+
 
 (defun match-binop (binop tree)
   (destructuring-bind (&optional a binop? (b nil b?) &rest rest) tree
@@ -160,14 +160,14 @@
 
 ;;; Like cm, but automatically generates bindings.
 
-(defmacro Cm* (&rest body)
+(defmacro Cm+ (&rest body)
   (let ((variables (collect-assignment-variables body)))
     `(let ,variables
        (cm ,@body))))
 
 #+self-test.seed
-(self-test.seed:define-self-test cm*
+(self-test.seed:define-self-test cm+
   (equal (list 1 2)
-         (cm* a <- 1
+         (cm+ a <- 1
               b <- 2
               (list a b))))
