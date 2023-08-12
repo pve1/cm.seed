@@ -4,6 +4,7 @@
 
 (export '(cm
           cm+
+          cma+
           cmlet))
 
 ;;; Tree walking and manipulation
@@ -248,3 +249,62 @@
          (cm+ a <- 1
               b <- 2
               (list a b))))
+
+;;; Cma+
+
+;;; Provides a top-level "ANS" variable (interned into *package*) that
+;;; contains the result of the last non-cm expression.
+
+(defun skip-cm-expression (tree &optional acc)
+  (flet ((symbol-string= (string thing)
+           (and (symbolp thing)
+                (string= string thing))))
+    (destructuring-bind (&optional place arrow (value nil valuep)
+                         &rest rest)
+        tree
+      (cond ((and valuep (symbol-string= "<-" arrow))
+             (if (symbol-string= "<-" (car rest)) ; chain
+                 (skip-cm-expression (cons value rest)
+                                     (append acc (list place arrow)))
+                 (skip-cm-expression rest
+                                     (append acc (list place arrow value)))))
+            ((symbol-string= "^" (car tree))
+             (skip-cm-expression (cddr tree)
+                                 (append acc (list (car tree) (cadr tree)))))
+            (t (values tree acc))))))
+
+#+self-test.seed
+(self-test.seed:define-self-test skip-cm-expression
+  (equal '(1) (skip-cm-expression '(1)))
+  (equal '(2) (skip-cm-expression '(^ 1 2)))
+  (equal '(2) (skip-cm-expression '(a <- 1 2)))
+  (equal '(2) (skip-cm-expression '(a <- b <- 1 2))))
+
+(defmacro cma+ (&rest body)
+  `(cm+ ,@(loop :for (forms cm-expression) = (multiple-value-list
+                                              (skip-cm-expression body))
+                :then (multiple-value-list (skip-cm-expression (cdr forms)))
+                :for head = (car forms)
+                :while (or forms cm-expression)
+                :when cm-expression
+                :append cm-expression
+                :when forms
+                :append `(,(intern "ANS" *package*) <- ,head))))
+
+#+self-test.seed
+(self-test.seed:define-self-test cma+
+  (equal (cma+ 1 ans)
+         1)
+  (equal (cma+ 1
+               a <- (* 2 ans)
+               ans)
+         1)
+  (equal (cma+ 1
+               ^ ans
+               2)
+         1)
+  (equal (cma+ 1
+               (+ ans 1)
+               a <- (* ans 0)
+               (* ans 2))
+         4))
