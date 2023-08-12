@@ -92,12 +92,80 @@
                  (set-a) <- 1
                  a)))))
 
+;;; Destructuring assignment
+
+;;; (&key a b) <- (list :a 1 :b 2)
+;;;   => (destructuring-bind (&key a b) (list :a 1 :b 2) ...)
+;;; (&optional a b) <- (list 1 2)
+;;;   => (destructuring-bind (&optional a b) (list 1 2) ...)
+;;; (x &key a) <- (list 1 :a 2)
+;;;   => (destructuring-bind (x &key a) (list 1 :a 2) ...)
+
+(defun looks-like-destructuring-form-p (form)
+  (and (consp form)
+       (loop :for object :in form
+             :thereis (member object '(&optional &key &rest &aux &allow-other-keys)))))
+
+(defun substitute-destructuring-assignment (tree)
+  (destructuring-bind (&optional destructuring-form
+                                 assignment?
+                                 (value nil valuep)
+                       &rest rest)
+      tree
+    (cond ((and (symbolp assignment?)
+                (string= assignment? "<-")
+                valuep
+                (looks-like-destructuring-form-p destructuring-form))
+           `((destructuring-bind ,destructuring-form ,value
+              ,@rest)))
+          (t tree))))
+
+#+self-test.seed
+(self-test.seed:define-self-test substitute-destructuring-assignment
+  (equal '((destructuring-bind (&key a) (list :a 1)))
+         (substitute-destructuring-assignment '((&key a) <- (list :a 1))))
+  (equal '(a <- (list :a 1))
+         (substitute-destructuring-assignment '(a <- (list :a 1)))))
+
+(defmacro with-destructuring-assignment (&body body)
+  `(progn ,@(tree-walking.seed:map-tree-conses-postorder
+             'substitute-destructuring-assignment body)))
+
+#+self-test.seed
+(self-test.seed:define-self-test with-destructuring-assignment
+  (equal '(1 2)
+         (with-destructuring-assignment
+           (&key a) <- (list :a 1)
+           (&key b) <- (list :b 2)
+           (list a b)))
+  (equal '(1 2)
+         (with-destructuring-assignment
+           (&key a b) <- (list :a 1 :b 2)
+           (when (and a b)
+             (x y &key) <- (list a b)
+             (list x y))))
+  (eq :error
+      ;; Muffle undefined variable warnings.
+      (let ((f (handler-bind ((warning #'muffle-warning))
+                 (compile nil '(lambda ()
+                                (with-destructuring-assignment
+                                  (&key a b) <- (list :a 1 :b 2)
+                                  (when (and a b)
+                                    (x y &key) <- (list a b))
+                                  ;; Undefined.
+                                  (list x y)))))))
+        (handler-case (funcall f)
+          (error () :error)))))
+
+;;; Putting it all together.
+
 ;;; Combines with-arrow-assignment and with-caret-return.
 
 (defmacro Cm (&rest body)
-  `(with-arrow-assignment
-     (with-caret-return
-       ,@body)))
+  `(with-destructuring-assignment
+     (with-arrow-assignment
+       (with-caret-return
+         ,@body))))
 
 #+self-test.seed
 (self-test.seed:define-self-test cm
@@ -110,7 +178,12 @@
                  (foo) <- 3
                  ^ (list a b c d e)
                  10)))
-         (list nil 1 2 2 3)))
+         (list nil 1 2 2 3))
+  (equal (let (a)
+           (cm a <- (list 1 :a 2 :b 2)
+               (x &rest rest &key a &allow-other-keys) <- a
+               (list x a rest)))
+         '(1 2 (:a 2 :b 2))))
 
 ;;; Combines cm with let.
 
