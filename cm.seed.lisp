@@ -22,6 +22,8 @@
   (equal (reduce-elements 1 '(1 2 3) '(a b) t) '(a b 2 3))
   (equal (reduce-elements 2 '(1 2 3) '(a b)) '((a b) 3)))
 
+;;; Return operator
+
 ;;; ^ foo => (return-from done foo)
 
 (defun substitute-return (tree)
@@ -50,6 +52,8 @@
   (equal 1 (with-caret-return
              ^ 1
              2)))
+
+;;; Simple assignment
 
 ;;; a <- b         => (setf a b)
 ;;; (foo a) <- b   => (setf (foo a) b)
