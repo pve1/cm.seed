@@ -108,6 +108,9 @@
            (when (or (null valuep)
                      (cm-operator-p value)
                      (cm-operator-p place)
+                     ;; We include the following since (cm <- 1)
+                     ;; should signal bad-expression. See definition
+                     ;; of CM.
                      (eq 'with-caret-return place))
              (bad-expression-error tree))
            (reduce-elements 3 tree `(setf ,place ,value)))
