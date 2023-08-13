@@ -162,7 +162,7 @@
 
 ;;; Combines with-arrow-assignment and with-caret-return.
 
-(defmacro Cm (&rest body)
+(defmacro cm (&rest body)
   `(with-destructuring-assignment
      (with-arrow-assignment
        (with-caret-return
@@ -188,7 +188,7 @@
 
 ;;; Combines cm with let.
 
-(defmacro Cmlet (bindings &body body)
+(defmacro cmlet (bindings &body body)
   `(let ,bindings
      (cm ,@body)))
 
@@ -238,7 +238,7 @@
 
 ;;; Like cm, but automatically generates bindings.
 
-(defmacro Cm+ (&rest body)
+(defmacro cm+ (&rest body)
   (let ((variables (collect-assignment-variables body)))
     `(let ,variables
        (cm ,@body))))
