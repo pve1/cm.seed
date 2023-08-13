@@ -7,6 +7,17 @@
           cma+
           cmlet))
 
+#+self-test.seed
+(defmacro eval-without-warnings (&body body)
+  `(handler-bind ((warning #'muffle-warning))
+     (eval ,@body)))
+
+#+self-test.seed
+(defmacro eval-catching-error (&body body)
+  (let ((condition (gensym)))
+    `(handler-case (progn (eval ,@body) nil)
+       (error (,condition) ,condition))))
+
 ;;; Tree walking and manipulation
 
 (defun reduce-elements (n list new &optional append)
@@ -23,6 +34,26 @@
   (equal (reduce-elements 1 '(1 2 3) '(a b) t) '(a b 2 3))
   (equal (reduce-elements 2 '(1 2 3) '(a b)) '((a b) 3)))
 
+;;; Conditions
+
+(define-condition bad-expression (error)
+  ((input :initarg :input :reader input :initform nil))
+  (:report (lambda (c s)
+             (format s "Bad expression: ~S" (input c)))))
+
+(defun bad-expression-error (&optional input)
+  (error 'bad-expression :input input))
+
+;;; Functions
+
+(defun cm-operator-p (thing)
+  (and (symbolp thing)
+       (member thing '("^" "<-") :test #'string=)))
+
+(defun symbol-string= (string thing)
+  (and (symbolp thing)
+       (string= string thing)))
+
 ;;; Return operator
 
 ;;; ^ foo => (return-from done foo)
@@ -32,16 +63,22 @@
                        &rest rest)
       tree
     (declare (ignore rest))
-    (if (and (symbolp return)
-             (string= (string return) "^")
-             valuep)
-        (reduce-elements 2 tree `(return-from done ,value))
-        tree)))
+    (cond ((symbol-string= "^" return)
+           (when (or (null valuep)
+                     (cm-operator-p value))
+             (bad-expression-error tree))
+           (reduce-elements 2 tree `(return-from done ,value)))
+          (t tree))))
 
 #+self-test.seed
 (self-test.seed:define-self-test substitute-return
   (equal '(a b c) (substitute-return '(a b c)))
-  (equal '((return-from done nil)) (substitute-return '(^ nil))))
+  (equal '((return-from done nil)) (substitute-return '(^ nil)))
+  (loop :for e :in '((^)
+                     (^ ^)
+                     (^ <-))
+        :always (handler-case (substitute-return e)
+                  (error (c) c))))
 
 (defmacro with-caret-return (&body body)
   `(block done
@@ -61,20 +98,39 @@
 ;;; a <- b <- c    => (setf a (setf b c))
 
 (defun substitute-assignment (tree)
-  (destructuring-bind (&optional place assignment? (value nil valuep)
+  (destructuring-bind (&optional place
+                                 (assignment nil assignmentp)
+                                 (value nil valuep)
                        &rest rest)
       tree
     (declare (ignore rest))
-    (if (and (symbolp assignment?)
-             (string= (string assignment?) "<-")
-             valuep)
-        (reduce-elements 3 tree `(setf ,place ,value))
-        tree)))
+    (cond ((symbol-string= "<-" assignment)
+           (when (or (null valuep)
+                     (cm-operator-p value)
+                     (cm-operator-p place)
+                     (eq 'with-caret-return place))
+             (bad-expression-error tree))
+           (reduce-elements 3 tree `(setf ,place ,value)))
+
+          ((and (symbol-string= "<-" place)
+                (null assignmentp))
+           (bad-expression-error tree))
+
+          (t tree))))
 
 #+self-test.seed
 (self-test.seed:define-self-test substitute-assignment
   (equal '(a b c) (substitute-assignment '(a b c)))
-  (equal '((setf a nil) x) (substitute-assignment '(a <- nil x))))
+  (equal '((setf a nil) x) (substitute-assignment '(a <- nil x)))
+  (loop :for e :in '((<-)
+                     (<- <-)
+                     (<- <- <-)
+                     (a <-)
+                     (a <- <-)
+                     (^ <- a)
+                     (a <- ^))
+        :always (handler-case (substitute-assignment e)
+                  (error (c) c))))
 
 (defmacro with-arrow-assignment (&body body)
   `(progn ,@(tree-walking.seed:map-tree-conses-postorder
@@ -145,18 +201,14 @@
            (when (and a b)
              (x y &key) <- (list a b)
              (list x y))))
-  (eq :error
-      ;; Muffle undefined variable warnings.
-      (let ((f (handler-bind ((warning #'muffle-warning))
-                 (compile nil '(lambda ()
-                                (with-destructuring-assignment
-                                  (&key a b) <- (list :a 1 :b 2)
-                                  (when (and a b)
-                                    (x y &key) <- (list a b))
-                                  ;; Undefined.
-                                  (list x y)))))))
-        (handler-case (funcall f)
-          (error () :error)))))
+  (equal '(nil nil)
+         (eval-without-warnings
+           '(let (x y)
+             (with-destructuring-assignment
+               (&key a b) <- (list :a 1 :b 2)
+               (when (and a b)
+                 (x y &key) <- (list a b))
+               (list x y))))))
 
 ;;; Putting it all together.
 
@@ -184,7 +236,9 @@
            (cm a <- (list 1 :a 2 :b 2)
                (x &rest rest &key a &allow-other-keys) <- a
                (list x a rest)))
-         '(1 2 (:a 2 :b 2))))
+         '(1 2 (:a 2 :b 2)))
+  (typep (eval-catching-error '(cm <- 1))
+         'bad-expression))
 
 ;;; Combines cm with let.
 
@@ -295,16 +349,18 @@
 (self-test.seed:define-self-test cma+
   (equal (cma+ 1 ans)
          1)
-  (equal (cma+ 1
-               a <- (* 2 ans)
-               ans)
+  (equal (eval-without-warnings
+           '(cma+ 1
+                   a <- (* 2 ans)
+                   ans))
          1)
   (equal (cma+ 1
                ^ ans
                2)
          1)
-  (equal (cma+ 1
-               (+ ans 1)
-               a <- (* ans 0)
-               (* ans 2))
+  (equal (eval-without-warnings
+           '(cma+ 1
+             (+ ans 1)
+             a <- (* ans 0)
+             (* ans 2)))
          4))
