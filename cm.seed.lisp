@@ -263,7 +263,7 @@
   (destructuring-bind (&optional a binop? (b nil b?) &rest rest) tree
     (declare (ignore rest))
     (when (and (symbolp binop?)
-               (string= (string binop) (string binop?))
+               (string= binop binop?)
                b?)
       (list :left a
             :right b))))
